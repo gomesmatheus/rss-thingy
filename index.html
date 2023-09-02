@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script>
+            function buildAudioComponent(id) {
+                const audioElement = document.getElementById(id);
+                audioElement.addEventListener("pause", (event) => {
+                    console.log("pausou:", event.target.currentTime);
+                    localStorage.setItem(id, event.target.currentTime);
+                });
+
+                const currentTime = localStorage.getItem(id);
+                if(currentTime){
+                    audioElement.currentTime = currentTime;
+                }
+            }
+
+            addEventListener("beforeunload", (event) => {
+                const audios = document.getElementsByTagName("audio");
+                for (let i = 0; i < audios.length; i++){
+                    const audio = audios[i]
+                    localStorage.setItem(audio.getAttribute("id"), audio.currentTime);
+                }
+                fetch("/ping").then((res) => res);
+            });
+        </script>
+    </head>
+    <body>
+        <h1>Title - {{.Channel.Title}}</h1>
+        {{range .Channel.Items}}
+        <p>{{.Title}}</p>
+        <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
+        {{else}}
+        <p>no rows</p>
+        {{end}}
+    </body>
+</html>

@@ -7,7 +7,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 )
 
 type Rss struct {
@@ -16,6 +18,7 @@ type Rss struct {
         Items []struct {
             Title string `xml:"title"`
             Link string `xml:"link"`
+            Date string `xml:"pubDate"`
             Id string
             Enclosure struct {
                 Url string `xml:"url,attr"`
@@ -26,63 +29,32 @@ type Rss struct {
 
 func main() {
     http.HandleFunc("/index", viewHandler)
-    http.HandleFunc("/ping", pingHandler)
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Println("bateu aqui!")
-    w.Write([]byte("pong"))
-}
-
 func viewHandler(w http.ResponseWriter, r *http.Request) {
-    tpl := `
-        <!DOCTYPE html>
-        <html>
-            <head>
-                <script>
-                    function buildAudioComponent(id) {
-                        const audioElement = document.getElementById(id);
-                        audioElement.addEventListener("pause", (event) => {
-                            console.log("pausou:", event.target.currentTime);
-                            localStorage.setItem(id, event.target.currentTime);
-                        });
-
-                        const currentTime = localStorage.getItem(id);
-                        if(currentTime){
-                            audioElement.currentTime = currentTime;
-                        }
-                    }
-
-                    addEventListener("beforeunload", (event) => {
-                        const audios = document.getElementsByTagName("audio");
-                        for (let i = 0; i < audios.length; i++){
-                            const audio = audios[i]
-                            localStorage.setItem(audio.getAttribute("id"), audio.currentTime);
-                        }
-                        fetch("/ping").then((res) => res);
-                    });
-                </script>
-            </head>
-            <body>
-                <h1>Title - {{.Channel.Title}}</h1>
-                {{range .Channel.Items}}
-                    <p>{{.Title}}</p>
-                    <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
-                {{else}}
-                    <p>no rows</p>
-                {{end}}
-            </body>
-        </html>
-    `
-
-    // feedsUrl := []string{"https://radioescafandro.com/feed/", "https://anchor.fm/s/1969eccc/podcast/rss"}
-    feedsUrl := []string{"https://radioescafandro.com/feed/"}
-
-    var parsedXml Rss
-    for _, url := range feedsUrl {
-        parsedXml = *parseRssFeed(url)
+    tpl, err := template.ParseFiles("index.html")
+    if err != nil {
+        log.Fatal("Error parsing html file", err)
     }
+
+    feedsUrl := []string{"https://radioescafandro.com/feed/", "https://anchor.fm/s/1969eccc/podcast/rss"}
+
+    var parsedXmls []Rss
+    for _, url := range feedsUrl {
+        parsedXmls = append(parsedXmls, *parseRssFeed(url))
+    }
+
+    parsedXml := parsedXmls[1]
+    parsedXml.Channel.Items = append(parsedXml.Channel.Items, parsedXmls[0].Channel.Items...)
+    sort.Slice(parsedXml.Channel.Items, func(i,j int) bool {
+        t1, _ := time.Parse("Tue, 14 Mar 2023 20:05:53 +0000",parsedXml.Channel.Items[i].Date)
+        fmt.Println(parsedXml.Channel.Items[i].Date)
+        t2, _ := time.Parse(parsedXml.Channel.Items[j].Date, "Tue, 14 Mar 2023 20:05:53 +0000")
+
+        fmt.Println(t1, t2)
+        return parsedXml.Channel.Items[i].Date > parsedXml.Channel.Items[j].Date
+    })
 
     for i := range parsedXml.Channel.Items {
         segments := strings.Split(parsedXml.Channel.Items[i].Link, "/")
@@ -94,11 +66,8 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 	}
-	t, err := template.New("webpage").Parse(tpl)
-	check(err)
 
-
-    err = t.Execute(w, parsedXml)
+    err = tpl.Execute(w, parsedXml)
 	check(err)
 }
 
