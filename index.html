@@ -5,6 +5,7 @@
             function buildAudioComponent(id) {
                 const audioElement = document.getElementById(id);
                 audioElement.addEventListener("pause", (event) => {
+    parsedXml.Channel.Items = append(parsedXml.Channel.Items, parsedXmls[0].Channel.Items...)
                     console.log("pausou:", event.target.currentTime);
                     localStorage.setItem(id, event.target.currentTime);
                 });
@@ -29,7 +30,10 @@
         <h1>Title - {{.Channel.Title}}</h1>
         {{range .Channel.Items}}
         <p>{{.Title}}</p>
-        <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
+        <p style="max-width: 500px">
+            <img src="{{ .Image.Url }}" style="max-height: 400px"/>
+            <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
+        </p>
         {{else}}
         <p>no rows</p>
         {{end}}

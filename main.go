@@ -20,6 +20,9 @@ type Rss struct {
             Link string `xml:"link"`
             Date string `xml:"pubDate"`
             Id string
+            Image struct {
+                Url string `xml:"href,attr"`
+            } `xml:"image"`
             Enclosure struct {
                 Url string `xml:"url,attr"`
             } `xml:"enclosure"`
@@ -38,7 +41,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         log.Fatal("Error parsing html file", err)
     }
 
-    feedsUrl := []string{"https://radioescafandro.com/feed/", "https://anchor.fm/s/1969eccc/podcast/rss"}
+    feedsUrl := []string{"https://radioescafandro.com/feed/", "https://anchor.fm/s/1969eccc/podcast/rss", "https://www.spreaker.com/show/3258232/episodes/feed"}
 
     var parsedXmls []Rss
     for _, url := range feedsUrl {
@@ -47,13 +50,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 
     parsedXml := parsedXmls[1]
     parsedXml.Channel.Items = append(parsedXml.Channel.Items, parsedXmls[0].Channel.Items...)
+    parsedXml.Channel.Items = append(parsedXml.Channel.Items, parsedXmls[2].Channel.Items...)
     sort.Slice(parsedXml.Channel.Items, func(i,j int) bool {
-        t1, _ := time.Parse("Tue, 14 Mar 2023 20:05:53 +0000",parsedXml.Channel.Items[i].Date)
-        fmt.Println(parsedXml.Channel.Items[i].Date)
-        t2, _ := time.Parse(parsedXml.Channel.Items[j].Date, "Tue, 14 Mar 2023 20:05:53 +0000")
-
-        fmt.Println(t1, t2)
-        return parsedXml.Channel.Items[i].Date > parsedXml.Channel.Items[j].Date
+        t1, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 MST",parsedXml.Channel.Items[i].Date)
+        t2, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 MST",parsedXml.Channel.Items[j].Date)
+        return t2.Before(t1)
     })
 
     for i := range parsedXml.Channel.Items {
