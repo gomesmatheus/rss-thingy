@@ -5,7 +5,6 @@
             function buildAudioComponent(id) {
                 const audioElement = document.getElementById(id);
                 audioElement.addEventListener("pause", (event) => {
-    parsedXml.Channel.Items = append(parsedXml.Channel.Items, parsedXmls[0].Channel.Items...)
                     console.log("pausou:", event.target.currentTime);
                     localStorage.setItem(id, event.target.currentTime);
                 });
