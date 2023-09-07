@@ -21,20 +21,36 @@
                     const audio = audios[i]
                     localStorage.setItem(audio.getAttribute("id"), audio.currentTime);
                 }
-                fetch("/ping").then((res) => res);
+            });
+
+            function isPageAtBottom() {
+                const scrollTop = window.scrollY || window.pageYOffset;
+                const scrollHeight = document.documentElement.scrollHeight;
+                const clientHeight = document.documentElement.clientHeight;
+                return (scrollTop + clientHeight + 200) >= scrollHeight;
+            }
+
+            window.addEventListener('scroll', function () {
+                if (isPageAtBottom()) {
+                    console.log("You have scrolled to the bottom of the page.");
+                }
             });
         </script>
     </head>
     <body>
-        <h1>Title - {{.Channel.Title}}</h1>
-        {{range .Channel.Items}}
-        <p>{{.Title}}</p>
-        <p style="max-width: 500px">
-            <img src="{{ .Image.Url }}" style="max-height: 400px"/>
-            <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
-        </p>
-        {{else}}
-        <p>no rows</p>
-        {{end}}
+        <div id="main" style="display: flex;flex-direction: column;align-items: center;">
+            {{range .}}
+            <div>
+                <p>{{.Title}} - {{.PodcastTitle}}</p>
+                <p style="max-width: 500px">
+                    <img src="{{ .Image.Url }}" style="max-height: 400px"/>
+                    <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
+                </p>
+            </div>
+            {{else}}
+                <p>no rows</p>
+            {{end}}
+        </div>
+
     </body>
 </html>
