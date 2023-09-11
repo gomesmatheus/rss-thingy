@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <script src="https://unpkg.com/htmx.org@1.9.5"></script>
         <script>
             function buildAudioComponent(id) {
                 const audioElement = document.getElementById(id);
@@ -22,26 +23,17 @@
                     localStorage.setItem(audio.getAttribute("id"), audio.currentTime);
                 }
             });
-
-            function isPageAtBottom() {
-                const scrollTop = window.scrollY || window.pageYOffset;
-                const scrollHeight = document.documentElement.scrollHeight;
-                const clientHeight = document.documentElement.clientHeight;
-                return (scrollTop + clientHeight + 200) >= scrollHeight;
-            }
-
-            window.addEventListener('scroll', function () {
-                if (isPageAtBottom()) {
-                    console.log("You have scrolled to the bottom of the page.");
-                }
-            });
         </script>
     </head>
     <body>
         <div id="main" style="display: flex;flex-direction: column;align-items: center;">
+            <div id="search">
+                <input type="text" name="search-input" hx-post="/search" hx-trigger="keyup changed delay:500ms, search" hx-target="#search-results" />
+                <div id="search-results"></div>
+            </div>
             {{range .}}
-            <div>
-                <p>{{.Title}} - {{.PodcastTitle}}</p>
+            <div {{ if .LastElement }}hx-post="/load" hx-swap="beforeend" hx-trigger="revealed" hx-target="closest #main"{{ end }}>
+                <p style="max-width: 500px">{{.Title}} - {{.PodcastTitle}}</p>
                 <p style="max-width: 500px">
                     <img src="{{ .Image.Url }}" style="max-height: 400px"/>
                     <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
@@ -51,6 +43,5 @@
                 <p>no rows</p>
             {{end}}
         </div>
-
     </body>
 </html>

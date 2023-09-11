@@ -1,0 +1,12 @@
+
+{{range .}}
+<div {{ if .LastElement }}hx-post="/load" hx-swap="beforeend" hx-trigger="revealed" hx-target="closest #main"{{ end }}>
+    <p style="max-width: 500px">{{.Title}} - {{.PodcastTitle}}</p>
+    <p style="max-width: 500px">
+    <img src="{{ .Image.Url }}" style="max-height: 400px"/>
+    <audio id="{{ .Id }}" src="{{ .Enclosure.Url }}" controls onloadstart="buildAudioComponent({{ .Id }})"></audio>
+    </p>
+</div>
+{{else}}
+<p>no rows</p>
+{{end}}

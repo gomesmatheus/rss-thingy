@@ -1,64 +1,49 @@
 package main
 
 import (
-	"crypto/sha1"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
+	"main/client"
+	_ "main/memory"
+	"main/session"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
-type Rss struct {
-    Channel struct {
-        Title string `xml:"title"`
-        Items []Item `xml:"item"`
-    } `xml:"channel"`
-}
-type Item struct {
-    PodcastTitle string
-    Title string `xml:"title"`
-    Link string `xml:"link"`
-    Date string `xml:"pubDate"`
-    Id string
-    Image struct {
-        Url string `xml:"href,attr"`
-    } `xml:"image"`
-    Enclosure struct {
-        Url string `xml:"url,attr"`
-    } `xml:"enclosure"`
-}
-
+var globalSessions *session.Manager
 func main() {
+    globalSessions, _ = session.NewManager("memory","gosessionid",3600)
+    go globalSessions.GC()
     http.HandleFunc("/index", viewHandler)
+    http.HandleFunc("/load", loadHandler)
+    http.HandleFunc("/search", searchHandler)
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request) {
+    session := globalSessions.SessionStart(w, r)
+    session.Set("cur_page", 0)
     tpl, err := template.ParseFiles("index.html")
     if err != nil {
         log.Fatal("Error parsing html file", err)
     }
 
-    searchPodcast("nerdcast")
-    // feedsUrl := []string{"https://anchor.fm/s/a9f2877c/podcast/rss", "https://anchor.fm/s/1969eccc/podcast/rss", "https://www.spreaker.com/show/3258232/episodes/feed"}
-    feedsUrl := []string{"this is brazil", "nerdcast", "boa noite internet", "radio escafandro"}
-
+    podcastNames := []string{"podcast para tudo", "diva da diva", "eu tava la", "radio escafandro"}
     var wg sync.WaitGroup
-    var items []Item
-    c := make(chan []Item)
-    for _, url := range feedsUrl {
+    var items []client.Item
+    c := make(chan []client.Item)
+    for _, url := range podcastNames {
         wg.Add(1)
         go func(url string) {
             defer wg.Done()
-            url1 := searchPodcast(url)
-            res := parseRssFeed(url1)
+            result:= client.SearchPodcast(url).Podcasts[0].Url
+            res := client.ParseRssFeed(result)
             for i := range res.Channel.Items {
                 i = i
                 res.Channel.Items[i].PodcastTitle = res.Channel.Title
@@ -84,8 +69,9 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         items[i].Id = segment
     }
 
-    pages := paginate(items, 20)
+    pages := paginate(items, 10)
     items = pages[0]
+    session.Set("pages", pages)
 
     check := func(err error) {
 		if err != nil {
@@ -97,74 +83,45 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	check(err)
 }
 
-func parseRssFeed(feedUrl string) *Rss {
-    resp, err := http.Get(feedUrl)
-    if err != nil {
-        fmt.Println("Error retrieving feed")
+func loadHandler(w http.ResponseWriter, r *http.Request){
+    switch r.Method {
+        case http.MethodPost:
+            session := globalSessions.SessionStart(w, r)
+            pages := session.Get("pages")
+            currentPage := session.Get("cur_page").(int)
+            session.Set("cur_page", currentPage + 1)
+            tpl, _ := template.ParseFiles("partial.html")
+            tpl.Execute(w, pages.([][]client.Item)[currentPage + 1])
+        default:
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
-    defer resp.Body.Close()
-
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        fmt.Println("Error parsing body")
-    }
-
-    var parsedXml Rss
-    if err = xml.Unmarshal(body, &parsedXml); err != nil {
-        fmt.Println("Error parsing xml")
-    }
-
-    return &parsedXml
 }
 
-func searchPodcast(title string) string{
-    type Response struct {
-       Podcasts []struct {
-           Title string `json:"title"`
-           Url string `json:"url"`
-       } `json:"feeds"`
+func searchHandler(w http.ResponseWriter, r *http.Request){
+    switch r.Method {
+        case http.MethodPost:
+            defer r.Body.Close()
+            body, err := io.ReadAll(r.Body)
+            if err != nil {
+                fmt.Println("Error reading body")
+            }
+            split := strings.Split(string(body), "=")
+            var response client.Response
+            if len(split) > 0 {
+                fmt.Println(string(body))
+                searchedTerm := split[1]
+                s, _ := url.QueryUnescape(searchedTerm)
+                fmt.Println("searchedTerm", s)
+                response = client.SearchPodcast(s)
+            }
+            tpl, _ := template.ParseFiles("result.html")
+            tpl.Execute(w, response.Podcasts)
+        default:
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
-
-    client := &http.Client{}
-    apiKey := ""
-    apiSecret := ""
-    authDate := time.Now().Unix()
-    authorization := fmt.Sprintf("%s%s%d", apiKey, apiSecret, authDate)
-    fmt.Println("auth date", fmt.Sprintf("%d", authDate))
-
-    h := sha1.New()
-    h.Write([]byte(authorization))
-    authorizationEncrypted := fmt.Sprintf("%x", h.Sum(nil))
-    fmt.Println("auth", authorizationEncrypted)
-
-    req, _ := http.NewRequest("GET", "https://api.podcastindex.org/api/1.0/search/bytitle", nil)
-    req.Header.Add("X-Auth-Date", fmt.Sprintf("%d", authDate))
-    req.Header.Add("X-Auth-Key", apiKey)
-    req.Header.Add("Authorization", authorizationEncrypted)
-
-    q := req.URL.Query()
-    q.Add("q", title)
-    req.URL.RawQuery = q.Encode()
-
-    res, err := client.Do(req)
-    if err != nil {
-        fmt.Println("Error on podcastindex API")
-        fmt.Println(err)
-    }
-    fmt.Println(res.StatusCode)
-    defer res.Body.Close()
-
-
-    var response Response
-    body, err := io.ReadAll(res.Body)
-    json.Unmarshal(body, &response)
-
-    fmt.Println(response.Podcasts[0].Url)
-    fmt.Println(response.Podcasts[0].Title)
-    return response.Podcasts[0].Url
 }
 
-func paginate(items []Item, pageSize int) [][]Item{
+func paginate(items []client.Item, pageSize int) [][]client.Item{
     itemsSize := len(items)
     fmt.Println("There are", itemsSize, "items")
     pagesQtt := (itemsSize / pageSize)
@@ -172,13 +129,14 @@ func paginate(items []Item, pageSize int) [][]Item{
     if rest > 0 {
         pagesQtt++
     }
-    pages := make([][]Item, pagesQtt)
+    pages := make([][]client.Item, pagesQtt)
     fmt.Println("It will result in", pagesQtt, "pages with", pageSize, "items")
     for i := 0; i < pagesQtt; i++ {
         if ((i * pageSize) + pageSize) > itemsSize {
             pages[i] = items[(i * pageSize):((i * pageSize) + rest)]
         } else {
             pages[i] = items[(i * pageSize):((i * pageSize) + pageSize)]
+            pages[i][pageSize - 1].LastElement = true
         }
     }
 
